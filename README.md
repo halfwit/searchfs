@@ -76,8 +76,9 @@ handler=google path=/path/to/google/handler
 	maxresults=50
 	apikey=myapikey
 
-handler=youtube path=/path/to/google/handler
+handler=youtube path=/path/to/youtube/handler
 	maxresults=50
 	apikey=myapikey
 
-handler=
+handler=documents path=/path/to/documents/handler
+
