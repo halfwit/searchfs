@@ -8,6 +8,7 @@ POSIX:
 	make sure PLAN9 is set, and that PLAN9/bin is set in your PATH variable.
 	Simply run `mk`, and the program will be available as 0.searchfs
 	TODO: mk install
+	This currently builds, but does not mount properly on FreeBSD. This is due to FreeBSD not packaging fusermount along with their fuse implementation. 
 plan9:
 	mk install
 

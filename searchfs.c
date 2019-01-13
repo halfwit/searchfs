@@ -3,37 +3,26 @@
 #include <fcall.h>
 #include <thread.h>
 #include <9p.h>
+#include <bio.h>
+#include <ndb.h>
 
 char *user;
 
 typedef struct F {
 	char *name;
+	char *path;
 	Qid qid;
 	ulong perm;
 } F;
 
-enum {
-	Qroot,
-	Qrand,
-	Qlrand,
-	Qfrand,
-};
-
-F root = { "/", {Qroot, 0, QTDIR}, 0555|DMDIR };
-F roottab[] = {
-	"rand", {Qrand, 0, QTFILE}, 0444,
-	"lrand", {Qlrand, 0, QTFILE}, 0444,
-	"frand", {Qfrand, 0, QTFILE}, 0444,
-};
-
-Cmdtab cmd[] = {
-	0, "range", 3,
-};
+F root = { "/", nil, {0, 0, QTDIR}, 0700|DMDIR };
+F roottab[32];
+ulong total;
 
 void
 usage(void)
 {
-	fprint(2, "%s [-D] [-m mtpt] [-s srv]\n", argv0);
+	fprint(2, "%s [-D] [-c cfg] [-m mtpt] [-s srv]\n", argv0);
 	threadexitsall("usage");
 }
 
@@ -42,7 +31,7 @@ filebypath(uvlong path)
 {
 	int i;
 
-	if(path == Qroot)
+	if(path == 0)
 		return &root;
 	for(i = 0; i < nelem(roottab); i++)
 		if(path == roottab[i].qid.path)
@@ -50,39 +39,62 @@ filebypath(uvlong path)
 	return nil;
 }
 
+char *
+findattr(Ndbtuple *t, char * name) {
+	Ndbtuple *nt;
+	nt = ndbfindattr(t->entry, t->line, name);
+	if (nt == 0)
+		return 0;
+	return nt->val;
+}
+
+ulong
+parsecfg(Ndb* db)
+{
+	Ndbs s;
+	Ndbtuple *t, *nt;
+	ulong n = 0;
+	t = ndbsearch(db, &s, "type", "search");
+	for(nt = t; nt; nt = ndbsnext(&s, "type", "search") ) {
+		F handler = {
+			findattr(nt, "name"),
+			findattr(nt, "path"),
+			{ n + 1, 0, QTDIR }, /* qid 0 is our root dir */
+			0700|DMDIR,
+		};
+		if(handler.name == 0 || handler.path == 0)
+			continue;
+		roottab[n] = handler;
+		n++;
+	}
+	free(t);
+	return n;
+}
+
 void
 fsattach(Req *r)
 {
-	r->fid->qid = filebypath(Qroot)->qid;
+	r->fid->qid = filebypath(0)->qid;
 	r->ofcall.qid = r->fid->qid;
 	respond(r, nil);
 }
 
-/* If this file doesn't exist, we use the path element of the request to deduce the handler we want. If the path doesn't exist, return "No such handler: %d" */
 char *
 fswalk1(Fid *fid, char *name, Qid *qid)
 {
 	int i;
-	
-	switch(fid->qid.path){
-	/* There are no files on our root, only dirs
-	if the walk is to an eventual file, we call the handler
-	if the walk is to one of the dirs in our roottab, return that qid
-	*/
-	case Qroot:
-		for(i = 0; i < nelem(roottab); i++){
-			if(strcmp(roottab[i].name, name) == 0){
-				*qid = roottab[i].qid;
-				fid->qid = *qid;
-				return nil;
-			}
-		}
-		if(strcmp("..", name) == 0){
-			*qid = root.qid;
+	if ((fid->qid.path == 0) || (strcmp("..", name) == 0)) {
+		*qid = root.qid;
+		fid->qid = *qid;
+		return nil;
+	}
+	for(i = 0; i < total; i++) {
+		if(strcmp(roottab[i].name, name) == 0) {
+			*qid = roottab[i].qid;
 			fid->qid = *qid;
 			return nil;
 		}
-		break;
+
 	}
 	return "Directory not found"; 
 }
@@ -116,7 +128,7 @@ int
 rootgen(int n, Dir *d, void *v)
 {
 	USED(v);
-	if(n >= nelem(roottab))
+	if(n >= total)
 		return -1;
 	fillstat(d, roottab[n].qid.path);
 	return 0;
@@ -130,22 +142,10 @@ fsread(Req *r)
 	uvlong path;
 
 	path = r->fid->qid.path;
-	if(path == Qroot){
+	if(path == 0){
 		dirread9p(r, rootgen, nil);
 		respond(r, nil);
 		return;
-	}
-
-	switch(path){
-	case Qrand:
-		snprint(buf, sizeof buf, "%d\n", rand());
-		break;
-	case Qlrand:
-		snprint(buf, sizeof buf, "%ld\n", lrand());
-		break;
-	case Qfrand:
-		snprint(buf, sizeof buf, "%f\n", frand());
-		break;
 	}
 
 	count = strlen(buf);
@@ -159,23 +159,6 @@ fsread(Req *r)
 void
 fswrite(Req *r)
 {
-	uvlong path;
-	Cmdbuf *cb;
-	Cmdtab *cp;
-	
-	cb = parsecmd(r->ifcall.data, r->ifcall.count);
-	cp = lookupcmd(cb, cmd, nelem(cmd));
-	if(cp == nil){
-		respondcmderror(r, cb, "%r");
-		return;
-	}
-
-	path = r->fid->qid.path;
-	switch(path){
-	case Qrand:
-		print("%s %s\n", cb->f[0], cb->f[1]);
-		break;
-	}
 	respond(r, nil);
 }
 
@@ -190,11 +173,15 @@ Srv fs = {
 void
 threadmain(int argc, char *argv[])
 {
-	char *mtpt, *srv;
-
-	mtpt = "/mnt/rng";
+	Ndb* db;
+	char *mtpt, *srv, *cfg;
+	mtpt = "/mnt/search";
+	cfg = nil;
 	srv = nil;
 	ARGBEGIN{
+	case 'c':
+		cfg = EARGF(usage());
+		break;
 	case 'm':
 		mtpt = EARGF(usage());
 		break;
@@ -207,11 +194,18 @@ threadmain(int argc, char *argv[])
 	default:
 		usage();
 	}ARGEND;
-	
+
 	user = getuser();
-	//rootgen = genRoot();
-	threadpostmountsrv(&fs, srv, mtpt, MREPL);
-	
-	threadexitsall(nil);
+	db = ndbopen(cfg);
+
+	if (db == nil)
+		threadexitsall("Unable to open config file.\n");
+
+	total = parsecfg(db);
+	if (total == 0)
+		threadexitsall("Unable to set up handlers\n");
+	threadpostmountsrv(&fs, srv, mtpt, MREPL|MCREATE);
+
+	threadexits(nil);
 }
 
