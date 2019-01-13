@@ -1,0 +1,17 @@
+</$objtype/mkfile
+
+BIN=/$objtype/bin
+
+<mk.common
+
+CFLAGS=$CFLAGS
+
+</sys/src/cmd/mkone
+
+clean:V:
+	rm -f *.[$OS] [$OS].out *.acid $TARG
+
+install:V:	$BIN/$TARG
+
+uninstall:V:
+	rm -r $BIN/$TARG

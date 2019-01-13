@@ -1,0 +1,15 @@
+<$PLAN9/src/mkhdr
+
+<mk.common
+
+CFLAGS=$CFLAGS -fplan9-extensions
+LDFLAGS=$LDFLAGS -static
+
+<$PLAN9/src/mkone
+
+clean:V:
+	rm -f *.[$OS] [$OS].out *.acid $TARG
+
+$0.alg: algtest.$O alg.$O
+	$SD -o $target $prereq
+

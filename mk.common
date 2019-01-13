@@ -1,0 +1,6 @@
+TARG=searchfs
+
+LDFLAGS=-l9p
+OFILES=\
+	searchfs.$O\
+
