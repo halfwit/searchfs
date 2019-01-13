@@ -30,10 +30,9 @@ F *
 filebypath(uvlong path)
 {
 	int i;
-
 	if(path == 0)
 		return &root;
-	for(i = 0; i < nelem(roottab); i++)
+	for(i = 0; i < total; i++)
 		if(path == roottab[i].qid.path)
 			return &roottab[i];
 	return nil;
@@ -59,7 +58,7 @@ parsecfg(Ndb* db)
 		F handler = {
 			findattr(nt, "name"),
 			findattr(nt, "path"),
-			{ n + 1, 0, QTDIR }, /* qid 0 is our root dir */
+			{ n + 1, 0, QTDIR },
 			0700|DMDIR,
 		};
 		if(handler.name == 0 || handler.path == 0)
@@ -82,21 +81,23 @@ fsattach(Req *r)
 char *
 fswalk1(Fid *fid, char *name, Qid *qid)
 {
-	int i;
-	if ((fid->qid.path == 0) || (strcmp("..", name) == 0)) {
+	if((strcmp("/", name) == 0) || (strcmp("..", name) == 0)) {
 		*qid = root.qid;
 		fid->qid = *qid;
 		return nil;
 	}
-	for(i = 0; i < total; i++) {
-		if(strcmp(roottab[i].name, name) == 0) {
+	int i;
+	for(i = 0; i < total; i++)  {
+		if(strcmp(name, roottab[i].name) == 0) {
 			*qid = roottab[i].qid;
 			fid->qid = *qid;
 			return nil;
 		}
-
-	}
-	return "Directory not found"; 
+	} 
+	qid->path = total + 1;
+	qid->type = QTFILE;
+	fid->qid = *qid;
+	return nil;
 }
 
 void
@@ -134,23 +135,51 @@ rootgen(int n, Dir *d, void *v)
 	return 0;
 }
 
+long
+runhandler(File *f, char *buf)
+{
+	int fd[2];
+	long n = 0; 
+	USED(f);
+	if (pipe(fd) < 0)
+		return -1;
+	switch(fork()) {
+	case -1:
+		return -1;
+	case 0:
+		close(fd[0]);
+		dup(fd[1], 1);
+		close(fd[1]);
+		execl("/bin/rc", "-c", "uptime", nil);
+		sysfatal("Command failed, please fix handler");
+	default:
+		close(fd[1]);
+		long nr = 0;
+		while((nr = read(fd[0], buf, sizeof buf)) > 0) 
+			n+=nr;
+		close(fd[0]);
+		wait();
+		buf[n] = 0;
+	}
+	return n;
+}
+
 void
 fsread(Req *r)
 {
-	char buf[128];
 	int count;
 	uvlong path;
-
+	char *buf;
 	path = r->fid->qid.path;
 	if(path == 0){
 		dirread9p(r, rootgen, nil);
 		respond(r, nil);
 		return;
 	}
-
-	count = strlen(buf);
+	buf = runhandler(r->fid->file);
+	count = sizeof buf;
 	if(r->ifcall.count < count)
-		count = r->ifcall.count;
+		count = r->ifcall.count; 
 	r->ofcall.count = count;
 	memmove(r->ofcall.data, buf, count);
 	respond(r, nil);
