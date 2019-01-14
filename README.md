@@ -3,13 +3,17 @@ File server for searches using various backends
 
 ## Building:
 
-This requires plan9port or a plan9 installation to build and run. 
+This requires plan9port or a plan9 installation to build and run.
+ 
 POSIX:
+
 	make sure PLAN9 is set, and that PLAN9/bin is set in your PATH variable.
 	Simply run `mk`, and the program will be available as 0.searchfs
 	TODO: mk install
-	This currently builds, but does not mount properly on FreeBSD. This is due to FreeBSD not packaging fusermount along with their fuse implementation. 
+	This currently builds, but does not mount properly on FreeBSD. This is due to FreeBSD not packaging fusermount along with their fuse implementation.
+ 
 plan9:
+
 	mk install
 
 
@@ -36,11 +40,16 @@ $ ls <dir>/
 
 ## Usage:
 
-searchfs [ -cD ] [ -m mtpt ] [ -s srv]
+```
+
+searchfs [ -cD ] [ -m mtpt ] [ -s srv] -h handlers
  -c Caches all queries to files in a tree which mirrors searchfs
  -D Debug
  -m Mountpoint for the server
  -s Service (Plan9 only) post service 
+ -h directory containing handlers 
+
+```
 
 For each handler, searchfs will create a directory, and listen for file creations and reads.
 When data is requested, searchfs will invoke the handler, with the file name as the argument.
@@ -68,18 +77,18 @@ $ cat <dir>/lyrics/'Aqua - Barbie Girl'
 
 ## Configuration:
 
-There's not much to configure here. A typical file looks like this:
+There's not much to configure here. All configuration options are per-handler.
+ A typical file looks like this:
 
 ```
 
-handler=google path=/path/to/google/handler
+handler=google
 	# Handler specific data here
 	maxresults=50
 	apikey=myapikey
 
-handler=youtube path=/path/to/youtube/handler
+handler=youtube
 	maxresults=50
 	apikey=myapikey
 
-handler=documents path=/path/to/documents/handler
 

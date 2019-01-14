@@ -4,26 +4,40 @@
 #include <thread.h>
 #include <9p.h>
 #include <bio.h>
-#include <ndb.h>
 
-char *user;
+#define BUFMAX 2048
+#define N_HDLS 32
+
+char *dir, *user, query[256];
+ulong hndlr;
+long total;
+
 
 typedef struct F {
 	char *name;
-	char *path;
 	Qid qid;
 	ulong perm;
 } F;
 
-F root = { "/", nil, {0, 0, QTDIR}, 0700|DMDIR };
-F roottab[32];
-ulong total;
+F root = { "/", { 0, 0, QTDIR }, 0700|DMDIR };
+F roottab[N_HDLS];
 
 void
 usage(void)
 {
-	fprint(2, "%s [-D] [-c cfg] [-m mtpt] [-s srv]\n", argv0);
+	fprint(2, "%s [-D] [-d dir] [-m mtpt] [-s srv]\n", argv0);
 	threadexitsall("usage");
+}
+
+void
+inithandler(Dir d, int index)
+{
+	F handler = {
+		d.name,
+		{ index + 1, 0, QTDIR },
+		0700|DMDIR,
+	};
+	roottab[index] = handler;
 }
 
 F *
@@ -36,38 +50,6 @@ filebypath(uvlong path)
 		if(path == roottab[i].qid.path)
 			return &roottab[i];
 	return nil;
-}
-
-char *
-findattr(Ndbtuple *t, char * name) {
-	Ndbtuple *nt;
-	nt = ndbfindattr(t->entry, t->line, name);
-	if (nt == 0)
-		return 0;
-	return nt->val;
-}
-
-ulong
-parsecfg(Ndb* db)
-{
-	Ndbs s;
-	Ndbtuple *t, *nt;
-	ulong n = 0;
-	t = ndbsearch(db, &s, "type", "search");
-	for(nt = t; nt; nt = ndbsnext(&s, "type", "search") ) {
-		F handler = {
-			findattr(nt, "name"),
-			findattr(nt, "path"),
-			{ n + 1, 0, QTDIR },
-			0700|DMDIR,
-		};
-		if(handler.name == 0 || handler.path == 0)
-			continue;
-		roottab[n] = handler;
-		n++;
-	}
-	free(t);
-	return n;
 }
 
 void
@@ -91,9 +73,13 @@ fswalk1(Fid *fid, char *name, Qid *qid)
 		if(strcmp(name, roottab[i].name) == 0) {
 			*qid = roottab[i].qid;
 			fid->qid = *qid;
+			hndlr=fid->qid.path;
 			return nil;
 		}
-	} 
+	}
+	for(i = 0; i < sizeof name; i++)
+		query[i] = name[i];
+	query[sizeof name] = 0;
 	qid->path = total + 1;
 	qid->type = QTFILE;
 	fid->qid = *qid;
@@ -106,13 +92,13 @@ fillstat(Dir *d, uvlong path)
 	F *f;
 
 	f = filebypath(path);
+	d->length = 0;
 	d->name = estrdup9p(f->name);
 	d->qid = f->qid;
 	d->mode = f->perm;
 	d->uid = estrdup9p(user);
 	d->gid = estrdup9p(user);
 	d->muid = estrdup9p(user);
-	d->length = 0;
 	d->atime = time(0);
 	d->mtime = time(0);
 }
@@ -136,31 +122,39 @@ rootgen(int n, Dir *d, void *v)
 }
 
 long
-runhandler(File *f, char *buf)
+runhandler(char *buf)
 {
+	F *f;
+	char path[DIRMAX];
 	int fd[2];
-	long n = 0; 
-	USED(f);
-	if (pipe(fd) < 0)
-		return -1;
+	if (pipe(fd) < 0) {
+		fprint(2, "Failed to create pipe: %r\n");
+		return 0;
+	}
+	f = filebypath(hndlr);
 	switch(fork()) {
 	case -1:
-		return -1;
+		fprint(2, "Failed to fork %r\n");
+		return 0;
 	case 0:
 		close(fd[0]);
 		dup(fd[1], 1);
-		close(fd[1]);
-		execl("/bin/rc", "-c", "uptime", nil);
-		sysfatal("Command failed, please fix handler");
+		sprint(path, "%s/%s %s\n", dir, f->name, query);
+		execl("/bin/rc", "rc", "-c", path, nil);
+		fprint(2, "Command failed, please fix handler %r\n");
+		return 0;
 	default:
-		close(fd[1]);
-		long nr = 0;
-		while((nr = read(fd[0], buf, sizeof buf)) > 0) 
-			n+=nr;
-		close(fd[0]);
-		wait();
-		buf[n] = 0;
+		break;
 	}
+	close(fd[1]);
+	long n = 0;
+	for(long nr = 0; n < BUFMAX; n += nr) {
+		nr = read(fd[0], buf + n, BUFMAX);
+		if (nr < 1) 
+			break;
+	}
+	wait;
+	buf[n] = -1;
 	return n;
 }
 
@@ -168,7 +162,7 @@ void
 fsread(Req *r)
 {
 	int count;
-	char buf[256];
+	char buf[BUFMAX];
 	uvlong path;
 	path = r->fid->qid.path;
 	if(path == 0){
@@ -176,11 +170,8 @@ fsread(Req *r)
 		respond(r, nil);
 		return;
 	}
-	count = runhandler(r->fid->file, buf);
-	if(r->ifcall.count < count)
-		count = r->ifcall.count; 
-	r->ofcall.count = count;
-	memmove(r->ofcall.data, buf, count);
+	count = runhandler(buf);
+	readbuf(r, buf, count);
 	respond(r, nil);
 }
 
@@ -201,14 +192,15 @@ Srv fs = {
 void
 threadmain(int argc, char *argv[])
 {
-	Ndb* db;
-	char *mtpt, *srv, *cfg;
+	Dir *h;
+	int dp;
+	char *mtpt, *srv;
 	mtpt = "/mnt/search";
-	cfg = nil;
 	srv = nil;
+	dir = "handlers";
 	ARGBEGIN{
-	case 'c':
-		cfg = EARGF(usage());
+	case 'd':
+		dir = EARGF(usage());
 		break;
 	case 'm':
 		mtpt = EARGF(usage());
@@ -224,16 +216,17 @@ threadmain(int argc, char *argv[])
 	}ARGEND;
 
 	user = getuser();
-	db = ndbopen(cfg);
+	dp = open(dir, OREAD);
+	if (dp == 0)
+		threadexitsall("Unable to open handlers directory %r\n");
+	total = dirreadall(dp, &h);
+	for(int i = 0;i < total; i++) {
+		inithandler(h[i], i);
+	}
+	free(h);
+	close(dp);
 
-	if (db == nil)
-		threadexitsall("Unable to open config file.\n");
-
-	total = parsecfg(db);
-	if (total == 0)
-		threadexitsall("Unable to set up handlers\n");
 	threadpostmountsrv(&fs, srv, mtpt, MREPL|MCREATE);
-
 	threadexits(nil);
 }
 

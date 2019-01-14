@@ -1,0 +1,7 @@
+type=search name=google path=/some/path/to/somewhere
+	maxresults=50
+	apikey=1234890273491870
+
+type=search name=youtube path=/some/path/to/elsewhere
+	maxresults=49
+
