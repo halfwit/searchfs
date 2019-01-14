@@ -168,16 +168,15 @@ void
 fsread(Req *r)
 {
 	int count;
+	char buf[256];
 	uvlong path;
-	char *buf;
 	path = r->fid->qid.path;
 	if(path == 0){
 		dirread9p(r, rootgen, nil);
 		respond(r, nil);
 		return;
 	}
-	buf = runhandler(r->fid->file);
-	count = sizeof buf;
+	count = runhandler(r->fid->file, buf);
 	if(r->ifcall.count < count)
 		count = r->ifcall.count; 
 	r->ofcall.count = count;
