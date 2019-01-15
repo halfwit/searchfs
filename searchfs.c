@@ -217,7 +217,7 @@ threadmain(int argc, char *argv[])
 
 	user = getuser();
 	dp = open(dir, OREAD);
-	if (dp == 0)
+	if (dp < 0)
 		threadexitsall("Unable to open handlers directory %r\n");
 	total = dirreadall(dp, &h);
 	for(int i = 0;i < total; i++) {

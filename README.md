@@ -92,3 +92,18 @@ handler=youtube
 	apikey=myapikey
 
 
+## Handlers:
+
+Really, dropping any executable, which takes command line arguments, and writes to stdout into your handlers dir should work. For things that need command line flags, write a small rc script which calls the underlying binary with the flags you require, make the script executable, and put that script into the handler dir instead.
+
+```
+
+#!/bin/rc
+
+ping -c 1 $1
+
+```
+
+Handlers really shine when they wrap API endpoints. Searching a service can be arduous on a web browser, where your favorite search provider may well not index the content usefully, be difficult to navigate, or otherwise garner much more of your time than is necessary. 
+
+[ytcli](https://github.com/halfwit/ytcli) required to use youtube handler

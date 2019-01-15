@@ -1,0 +1,15 @@
+#!/bin/rc
+
+switch $1 {
+case playlist
+	shift
+	ytcli -p $*
+case channel
+	shift
+	ytcli -p $*
+case feed
+	shift
+	ytcli -p $*
+case *
+	ytcli $*
+}
