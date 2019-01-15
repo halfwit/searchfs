@@ -5,7 +5,7 @@
 #include <9p.h>
 #include <bio.h>
 
-#define BUFMAX 2048
+#define BUFMAX 4096
 #define N_HDLS 32
 
 char *dir, *user, query[256];

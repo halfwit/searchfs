@@ -2,6 +2,5 @@
 # Requires curl, awk
 
 curl -s dict://dict.org/d:$1:gcide | awk '/151/{flag=1;next}/250/{flag=0}flag' | sed 's///'
-echo '
-'
+
 
