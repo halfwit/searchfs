@@ -1,25 +1,42 @@
 #!/bin/rc
 
+rfork e 
+
 # Requires Go version of https://github.com/halfwit/ytcli
-# go get github.com/halfwit/ytcli and move it to your path
-# Make sure you get an API key for the V3 api. (See [link](http://forum.kodi.tv/showthread.php?tid=325740&pid=2681560#pid2681560) for instructions)
-# Either include it in factotum, or modify the following lines to read `ytcli -p -a <apikey> -p $*`
-# To enable thumbnails, add -t
+# go get github.com/halfwit/ytcli
+# go build -o $home/bin/disco github.com/halfwit/ytcli
 
-switch $1 {
-case playlist
-	shift
-	ytcli -p -m 20 $*
-case channel
-	shift
-	ytcli -p -m 20 $*
-case feed
-	shift
-	ytcli -f -m 20 $*
-case related
-	shift
-	ytcli -r -m 20 $*
+# Make sure you get an API key for the V3 api. 
+# See http://forum.kodi.tv/showthread.php?tid=325740&pid=2681560#pid2681560 for instructions
 
-case *
-	ytcli -m 20 $*
+fn usage {
+	echo usage:$0 '
+		[ playlist ][ channel ][ feed ] -- query
+		[ related | feed | channel ] -- URL' >[1=2]
+	exit usage
 }
+
+cmd=(ytcli)
+flags=(-t -m 10)
+
+while (! ~$#* 0 && ! ~ $1 --){
+	switch($1){
+	case playlist		
+		flags=($flags -p)
+	case channel
+		flags=($flags -c)
+	case feed
+		flags=($flags -f)
+	case related
+		flags=($flags -r)
+	case *
+		usage
+	}
+	shift
+}
+
+if(~ $#* 0) {
+	usage
+}
+
+$cmd $flags $*

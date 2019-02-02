@@ -1,6 +1,31 @@
 #!/bin/rc
 # Requires curl, awk
+rfork e 
 
-curl -s dict://dict.org/d:$1:gcide | awk '/151/{flag=1;next}/250/{flag=0}flag' | sed 's///'
+fn usage {
+	echo usage:$0 '[ dict ] -- word' >[1=2]
+	exit usage
+}
 
+cmd=(curl)
+dict=(gcide)
+flags=(-s)
 
+while (! ~$#* 0 && ! ~ $1 --){
+	switch($1){
+	case -*
+		flags=($flags $1)
+	case *
+		dict=($1)
+	}
+	shift
+}
+
+if(~ $#* 0) {
+	usage
+}
+
+# url encode spaces
+query=`{echo $* | sed 's/--? //;s/ +/%20/g'}
+
+$cmd $flags dict://dict.org/d:$query:$dict | awk '/151/{flag=1;next}/250/{flag=0}flag' | sed 's///g'
