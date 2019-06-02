@@ -35,6 +35,8 @@ while (! ~$#* 0 && ! ~ $1 --){
 	shift
 }
 
+shift
+
 if(~ $#* 0) {
 	usage
 }

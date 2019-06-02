@@ -4,14 +4,13 @@
 #include <thread.h>
 #include <9p.h>
 #include <bio.h>
+#include <String.h>
 
-#define BUFMAX 4096
+#define BUFMAX 24786
 #define N_HDLS 32
 
-char *dir, *user, query[256];
-ulong hndlr;
+char *dir, *user;
 long total;
-
 
 typedef struct F {
 	char *name;
@@ -19,19 +18,23 @@ typedef struct F {
 	ulong perm;
 } F;
 
+typedef struct Q {
+	char *cmd;
+	char *args;
+	int nargs;
+} Q;
+
 F root = { "/", { 0, 0, QTDIR }, 0700|DMDIR };
 F roottab[N_HDLS];
 
 void
-usage(void)
-{
+usage(void){
 	fprint(2, "%s [-D] [-d dir] [-m mtpt] [-s srv]\n", argv0);
 	threadexitsall("usage");
 }
 
 void
-inithandler(Dir d, int index)
-{
+inithandler(Dir d, int index){
 	F handler = {
 		d.name,
 		{ index + 1, 0, QTDIR },
@@ -41,8 +44,7 @@ inithandler(Dir d, int index)
 }
 
 F *
-filebypath(uvlong path)
-{
+filebypath(uvlong path){
 	int i;
 	if(path == 0)
 		return &root;
@@ -53,42 +55,69 @@ filebypath(uvlong path)
 }
 
 void
-fsattach(Req *r)
-{
-	r->fid->qid = filebypath(0)->qid;
+fsattach(Req *r){
+	r->fid->qid = root.qid;
 	r->ofcall.qid = r->fid->qid;
 	respond(r, nil);
 }
 
 char *
-fswalk1(Fid *fid, char *name, Qid *qid)
-{
+fswalk1(Fid *fid, char *name, Qid *qid){
+	// Just return the root
 	if((strcmp("/", name) == 0) || (strcmp("..", name) == 0)) {
 		*qid = root.qid;
 		fid->qid = *qid;
 		return nil;
 	}
+	Q *q;
 	int i;
 	for(i = 0; i < total; i++)  {
 		if(strcmp(name, roottab[i].name) == 0) {
+			q = malloc(sizeof(Q));
+			q->cmd = smprint("%s/%s", dir, name);
+			q->args = "";
+			q->nargs = 0;
+			fid->aux = q;
 			*qid = roottab[i].qid;
 			fid->qid = *qid;
-			hndlr=fid->qid.path;
 			return nil;
 		}
 	}
-	for(i = 0; i < sizeof name; i++)
-		query[i] = name[i];
-	query[sizeof name] = 0;
+	// Research what not using a unique qid->path would do
+	// We may want to instead create a type to hold a current
+	// path, and check it every time that we don't overflow
+	// being sure to reset to total + 1 if we are going to
 	qid->path = total + 1;
 	qid->type = QTFILE;
 	fid->qid = *qid;
+	q = fid->aux;
+	q->args = smprint("%s/%s", q->args, name);
+	q->nargs++;
+	fid->aux = q;
 	return nil;
 }
 
+char *
+parseargs(Q *q){
+	String *s;
+	char *argv[N_HDLS], *final;
+	int i, n;
+	s = s_copy(q->cmd);
+	n = getfields(q->args, argv, N_HDLS, 1, "/");
+	for(i = 0; i < n-1; i++){
+		s_putc(s, ' ');
+		s_append(s, argv[i]);
+	}
+
+	s_append(s, " -- ");
+	s_append(s, argv[n-1]);
+	final = estrdup9p(s_to_c(s));
+	s_free(s);
+	return final;
+}
+
 void
-fillstat(Dir *d, uvlong path)
-{
+fillstat(Dir *d, uvlong path){
 	F *f;
 
 	f = filebypath(path);
@@ -104,16 +133,14 @@ fillstat(Dir *d, uvlong path)
 }
 
 void
-fsstat(Req *r)
-{
+fsstat(Req *r){
 	fillstat(&r->d, r->fid->qid.path);
 	respond(r, nil);
 	return;
 }
 
 int
-rootgen(int n, Dir *d, void *v)
-{
+rootgen(int n, Dir *d, void *v){
 	USED(v);
 	if(n >= total)
 		return -1;
@@ -122,16 +149,12 @@ rootgen(int n, Dir *d, void *v)
 }
 
 long
-runhandler(char *buf)
-{
-	F *f;
-	char path[DIRMAX];
+runhandler(char *buf, char *cmd){
 	int fd[2];
 	if (pipe(fd) < 0) {
 		fprint(2, "Failed to create pipe: %r\n");
 		return 0;
 	}
-	f = filebypath(hndlr);
 	switch(fork()) {
 	case -1:
 		fprint(2, "Failed to fork %r\n");
@@ -139,59 +162,67 @@ runhandler(char *buf)
 	case 0:
 		close(fd[0]);
 		dup(fd[1], 1);
-		sprint(path, "%s/%s %s\n", dir, f->name, query);
-		execl("/bin/rc", "rc", "-c", path, nil);
+		execl("/bin/rc", "rc", "-c", cmd, nil);
 		fprint(2, "Command failed, please fix handler %r\n");
 		return 0;
 	default:
 		break;
 	}
+	sleep(500);
 	close(fd[1]);
-	long n = 0;
-	for(long nr = 0; n < BUFMAX; n += nr) {
+	long n = 0, nr;
+	for(; n < BUFMAX; n += nr) {
 		nr = read(fd[0], buf + n, BUFMAX);
 		if (nr < 1) 
 			break;
 	}
-	wait;
 	buf[n] = -1;
 	return n;
 }
 
 void
-fsread(Req *r)
-{
-	int count;
-	char buf[BUFMAX];
-	uvlong path;
-	path = r->fid->qid.path;
-	if(path == 0){
+fsread(Req *r){
+	Q *q = r->fid->aux;
+	int n;
+	char buf[BUFMAX], *cmd;
+	if(r->fid->qid.path == 0){
 		dirread9p(r, rootgen, nil);
 		respond(r, nil);
 		return;
 	}
-	count = runhandler(buf);
-	readbuf(r, buf, count);
+	cmd = parseargs(q);
+	n = runhandler(buf, cmd);
+	readbuf(r, buf, n);
+	respond(r, nil);
+}
+
+
+void
+fswrite(Req *r){
 	respond(r, nil);
 }
 
 void
-fswrite(Req *r)
-{
-	respond(r, nil);
+fsdestroy(Fid *f){
+	Q *q;
+
+	q = f->aux;
+	free(q);
+	f->aux = nil;
 }
 
 Srv fs = {
 .attach = fsattach,
-.read = fsread,
-.write = fswrite,
-.stat = fsstat,
-.walk1 = fswalk1,
+.destroyfid = fsdestroy,
+.read   = fsread,
+.write  = fswrite,
+.stat   = fsstat,
+.walk1  = fswalk1,
+
 };
 
 void
-threadmain(int argc, char *argv[])
-{
+threadmain(int argc, char *argv[]){
 	Dir *h;
 	int dp;
 	char *mtpt, *srv;
@@ -229,4 +260,3 @@ threadmain(int argc, char *argv[])
 	threadpostmountsrv(&fs, srv, mtpt, MREPL|MCREATE);
 	threadexits(nil);
 }
-

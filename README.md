@@ -42,12 +42,10 @@ $ ls <dir>/
 
 ```
 
-searchfs [ -cD ] [ -m mtpt ] [ -s srv] -h handlers
- -c Caches all queries to files in a tree which mirrors searchfs
- -D Debug
+searchfs [ -m mtpt ] [ -s srv] -d handlers
  -m Mountpoint for the server
  -s Service (Plan9 only) post service 
- -h directory containing handlers 
+ -d directory containing handlers 
 
 ```
 
@@ -72,6 +70,8 @@ $ cat <dir>/lyrics/'Aqua - Barbie Girl'
 	Hiya Barbie! Hi Ken!
 	[...]
 
+$ cat <dir>/youtube/channel/feed/Level1techs
+	Level1Techs - https://youtube.com/feeds/video.xml?channel_id=UC4w1YQAJMWOz4qtxinq55LQ
 
 ```
 
