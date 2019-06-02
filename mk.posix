@@ -3,7 +3,7 @@
 <mk.common
 
 CFLAGS=$CFLAGS -fplan9-extensions
-LDFLAGS=$LDFLAGS -static -lpthread
+LDFLAGS=$LDFLAGS -lpthread
 
 <$PLAN9/src/mkone
 
