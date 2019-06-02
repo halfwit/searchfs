@@ -4,7 +4,6 @@
 #include <thread.h>
 #include <9p.h>
 #include <bio.h>
-#include <String.h>
 
 #define BUFMAX 24786
 #define N_HDLS 32
@@ -99,20 +98,14 @@ fswalk1(Fid *fid, char *name, Qid *qid){
 
 char *
 parseargs(Q *q){
-	String *s;
 	char *argv[N_HDLS], *final;
-	int i, n;
-	s = s_copy(q->cmd);
+	int n, i;
+	final = q->cmd;
 	n = getfields(q->args, argv, N_HDLS, 1, "/");
 	for(i = 0; i < n-1; i++){
-		s_putc(s, ' ');
-		s_append(s, argv[i]);
+		final = smprint("%s %s", final, argv[i]);
 	}
-
-	s_append(s, " -- ");
-	s_append(s, argv[n-1]);
-	final = estrdup9p(s_to_c(s));
-	s_free(s);
+	final = smprint("%s -- %s", final, argv[n-1]);
 	return final;
 }
 
