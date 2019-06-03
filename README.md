@@ -21,6 +21,8 @@ plan9:
 
 ```
 
+# Some of these handlers don't exist, possibly won't exist. PRs are definitely welcome
+# For inspiration or guidance on how to create these, look to https://github.com/halfwit/dsearch
 $ ls <dir>/
 	google/     # Query Google (normal searches)
 	youtube/    # Single videos, playlists, channels, users
