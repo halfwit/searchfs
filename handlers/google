@@ -1,0 +1,33 @@
+#!/bin/rc
+
+rfork e 
+
+# Requires Go version of https://github.com/halfwit/gcli
+# This will get much better as time goes on
+
+fn usage {
+	echo usage:$0 '
+		[ image ] -- query' >[1=2]
+	exit usage
+}
+
+cmd=(gcli)
+flags=(-m 10)
+
+while (! ~$#* 0 && ! ~ $1 --){
+	switch($1){
+	case image		
+		flags=($flags -i)
+	case *
+		usage
+	}
+	shift
+}
+
+shift
+
+if(~ $#* 0) {
+	usage
+}
+
+$cmd $flags $*
