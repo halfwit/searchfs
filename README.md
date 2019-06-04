@@ -21,6 +21,8 @@ plan9:
 
 ```
 
+# Some of these handlers don't exist, possibly won't exist. PRs are definitely welcome
+# For inspiration or guidance on how to create these, look to https://github.com/halfwit/dsearch
 $ ls <dir>/
 	google/     # Query Google (normal searches)
 	youtube/    # Single videos, playlists, channels, users
@@ -62,7 +64,7 @@ $ cat <dir>/google/mysearch
 	of      http://path.to/some/other/site
 	results http://path.to/some/third/site
 
-$ cat <dir>/dictionary/'someword'
+$ cat <dir>/dict/'someword'
 	Some result from dict.org
 	http://the/url/of/the/data
 
@@ -107,3 +109,16 @@ ping -c 1 $1
 Handlers really shine when they wrap API endpoints. Searching a service can be arduous on a web browser, where your favorite search provider may well not index the content usefully, be difficult to navigate, or otherwise garner much more of your time than is necessary. 
 
 [ytcli](https://github.com/halfwit/ytcli) required to use youtube handler
+
+## Exporting as a network service
+
+```
+# Assuming you ran searchfs -S search -d handlers
+# Modify 192.168.1.10 to match your local machine that is running searchfs
+
+# On the host machine, listen on the network for incoming connections 
+aux/listen1 tcp!*!12345 /bin/exportfs -S /srv/search
+
+# On the client machine, connect to our new listener and mount it to /mnt/search
+srv -c tcp!192.168.1.10!19191 search /mnt/search
+```

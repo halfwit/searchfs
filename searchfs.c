@@ -9,7 +9,7 @@
 #define N_HDLS 32
 
 char *dir, *user;
-long total;
+long total, offset = 1;
 
 typedef struct F {
 	char *name;
@@ -23,7 +23,7 @@ typedef struct Q {
 	int nargs;
 } Q;
 
-F root = { "/", { 0, 0, QTDIR }, 0700|DMDIR };
+F root = { "/", { 0, 0, QTDIR }, 0766|DMDIR };
 F roottab[N_HDLS];
 
 void
@@ -37,7 +37,7 @@ inithandler(Dir d, int index){
 	F handler = {
 		d.name,
 		{ index + 1, 0, QTDIR },
-		0700|DMDIR,
+		0766|DMDIR,
 	};
 	roottab[index] = handler;
 }
@@ -82,11 +82,8 @@ fswalk1(Fid *fid, char *name, Qid *qid){
 			return nil;
 		}
 	}
-	// Research what not using a unique qid->path would do
-	// We may want to instead create a type to hold a current
-	// path, and check it every time that we don't overflow
-	// being sure to reset to total + 1 if we are going to
-	qid->path = total + 1;
+	offset++;
+	qid->path = total + offset;
 	qid->type = QTFILE;
 	fid->qid = *qid;
 	q = fid->aux;
@@ -112,8 +109,10 @@ parseargs(Q *q){
 void
 fillstat(Dir *d, uvlong path){
 	F *f;
-
 	f = filebypath(path);
+	if (f == nil){
+		return;
+	}
 	d->length = 0;
 	d->name = estrdup9p(f->name);
 	d->qid = f->qid;
@@ -128,7 +127,6 @@ fillstat(Dir *d, uvlong path){
 void
 fsstat(Req *r){
 	fillstat(&r->d, r->fid->qid.path);
-	respond(r, nil);
 	return;
 }
 
