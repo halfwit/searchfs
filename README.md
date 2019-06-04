@@ -44,9 +44,9 @@ $ ls <dir>/
 
 ```
 
-searchfs [ -m mtpt ] [ -s srv] -d handlers
+searchfs [ -m mtpt ] [ -S srv ] -d handlers
  -m Mountpoint for the server
- -s Service (Plan9 only) post service 
+ -S Service (Plan9 only) post service 
  -d directory containing handlers 
 
 ```
