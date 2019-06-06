@@ -1,0 +1,33 @@
+#!/bin/rc
+
+rfork e 
+
+fn usage {
+	echo usage:$0 '[ lyrics ] -- word' >[1=2]
+	exit usage
+}
+
+cmd=(hget)
+flags=()
+
+while (! ~$#* 0 && ! ~ $1 --){
+	switch($1){
+	case -*
+		flags=($flags $1)
+	case *
+		dict=($1)
+	}
+	shift
+}
+
+if(~ $#* 0) {
+	usage
+}
+
+shift
+
+# url encode spaces
+artist=`{echo $* | sed 's/ - .*//;s/ +/%20/g'}
+title=`{echo $* | sed 's/.* - //;s/ +/%20/g'}
+
+$cmd $flags 'http://makeitpersonal.co/lyrics?artist='$artist'&title='$title >[2]/dev/null
