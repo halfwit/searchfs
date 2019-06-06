@@ -76,14 +76,13 @@ fswalk1(Fid *fid, char *name, Qid *qid){
 			q->cmd = smprint("%s/%s", dir, name);
 			q->args = "";
 			q->nargs = 0;
-			qid->path = total + offset;
 			fid->aux = q;
 			*qid = roottab[i].qid;
+			qid->vers = offset++;
 			fid->qid = *qid;
 			return nil;
 		}
 	}
-	offset++;
 	qid->type = QTFILE;
 	fid->qid = *qid;
 	q = fid->aux;
