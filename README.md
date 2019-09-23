@@ -9,8 +9,6 @@ POSIX:
 
 	make sure PLAN9 is set, and that PLAN9/bin is set in your PATH variable.
 	Simply run `mk`, and the program will be available as 0.searchfs
-	TODO: mk install
-	This currently builds, but does not mount properly on FreeBSD. This is due to FreeBSD not packaging fusermount along with their fuse implementation.
  
 plan9:
 
@@ -108,7 +106,7 @@ ping -c 1 $1
 
 Handlers really shine when they wrap API endpoints. Searching a service can be arduous on a web browser, where your favorite search provider may well not index the content usefully, be difficult to navigate, or otherwise garner much more of your time than is necessary. 
 
-[ytcli](https://github.com/halfwit/ytcli) required to use youtube handler
+[ytcli](https://github.com/halfwit/ytcli) [gcli](https://github.com/halfwit/gcli) [wkcli](https://github.com/halfwit/wkcli) are required to interact with the default handlers!
 
 ## Exporting as a network service
 
