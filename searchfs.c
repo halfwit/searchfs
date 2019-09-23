@@ -23,12 +23,12 @@ typedef struct Q {
 	int nargs;
 } Q;
 
-F root = { "/", { 0, 0, QTDIR }, 0766|DMDIR };
+F root = { "/", { 0, 0, QTDIR }, 0777|DMDIR };
 F roottab[N_HDLS];
 
 void
 usage(void){
-	fprint(2, "%s [-D] [-d dir] [-m mtpt] [-s srv]\n", argv0);
+	fprint(2, "%s [-D] [-d dir] [-m mtpt] [-S srv]\n", argv0);
 	threadexitsall("usage");
 }
 
@@ -37,7 +37,7 @@ inithandler(Dir d, int index){
 	F handler = {
 		d.name,
 		{ index + 1, 0, QTDIR },
-		0766|DMDIR,
+		0777|DMDIR,
 	};
 	roottab[index] = handler;
 }
@@ -78,17 +78,16 @@ fswalk1(Fid *fid, char *name, Qid *qid){
 			q->nargs = 0;
 			fid->aux = q;
 			*qid = roottab[i].qid;
+			qid->vers = offset++;
 			fid->qid = *qid;
 			return nil;
 		}
 	}
-	offset++;
-	qid->path = total + offset;
 	qid->type = QTFILE;
 	fid->qid = *qid;
 	q = fid->aux;
-	q->args = smprint("%s/%s", q->args, name);
 	q->nargs++;
+	q->args = smprint("%s/%s", q->args, name);
 	fid->aux = q;
 	return nil;
 }
@@ -227,7 +226,7 @@ threadmain(int argc, char *argv[]){
 	case 'm':
 		mtpt = EARGF(usage());
 		break;
-	case 's':
+	case 'S':
 		srv = EARGF(usage());
 		break;
 	case 'D':

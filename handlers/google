@@ -12,7 +12,7 @@ fn usage {
 }
 
 cmd=(gcli)
-flags=(-m 10)
+flags=(-m 20)
 
 while (! ~$#* 0 && ! ~ $1 --){
 	switch($1){
