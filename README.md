@@ -91,6 +91,7 @@ handler=youtube
 	maxresults=50
 	apikey=myapikey
 
+```
 
 ## Handlers:
 
